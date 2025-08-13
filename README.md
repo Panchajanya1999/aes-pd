@@ -1,6 +1,6 @@
 # Secure AES-256 Key Storage System
 
-A cryptographically secure system for creating and managing one-time-use AES-256 encryption keys using a prepared USB pendrive as a hardware key store.
+A cryptographically secure system for creating and managing one-time-use AES-256 encryption keys using a prepared `read-only no-filesystem` USB pendrive as a hardware key store.
 
 ## Table of Contents
 
