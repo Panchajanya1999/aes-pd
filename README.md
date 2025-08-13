@@ -3,6 +3,7 @@
 A cryptographically secure system for creating and managing one-time-use AES-256 encryption keys using a prepared USB pendrive as a hardware key store.
 
 ## Table of Contents
+
 - [Overview](#overview)
 - [System Components](#system-components)
 - [Use Cases](#use-cases)
@@ -24,16 +25,19 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 ## System Components
 
 ### 1. `rand2stick.sh`
+
 - **Purpose**: Prepares the USB pendrive with encrypted random data
 - **Function**: Fills the device with AES-256-CTR encrypted random bytes, leaving 1GB reserved space
 - **Output**: A pendrive ready to serve as a key source + embedded extraction script
 
 ### 2. `dump_memory.sh` ( requires dumping first )
+
 - **Purpose**: Extracts individual AES-256 keys from the prepared pendrive
 - **Function**: Reads 32-byte chunks with automatic offset tracking and overlap prevention
 - **Output**: Binary key files ready for cryptographic use
 
 ### 3. Record Keeping System
+
 - **Location**: `~/.pendrive_key_record.log`
 - **Purpose**: Prevents key reuse by tracking all extractions automatically
 - **Function**: Maintains audit trail of device, offset, length, output file, and timestamp
@@ -41,6 +45,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 ## Use Cases
 
 ### Primary Applications
+
 - **Secure File Encryption**: Each file gets a unique AES-256 key
 - **Database Encryption**: Unique keys for different database segments
 - **Secure Communication**: One-time keys for message encryption
@@ -49,6 +54,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 - **Air-Gapped Systems**: Physical key distribution without network exposure
 
 ### Ideal For Organizations That Need
+
 - Hardware-based key management without expensive HSMs
 - Audit trails for key usage
 - Physical control over cryptographic material
@@ -58,6 +64,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 ## Advantages
 
 ### Security Benefits
+
 - **True Randomness**: Based on `/dev/urandom` with AES-256-CTR mixing
 - **One-Time Use**: Automatic tracking prevents key reuse
 - **Air-Gap Compatible**: No network required for key distribution
@@ -65,6 +72,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 - **Audit Trail**: Complete history of all key extractions
 
 ### Operational Benefits
+
 - **Cost-Effective**: Uses standard USB pendrives instead of expensive HSMs
 - **Portable**: Easy to transport and store securely
 - **Large Capacity**: 32GB pendrive = ~900 million unique AES-256 keys
@@ -72,6 +80,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 - **Offline**: Works on air-gapped systems
 
 ### Compliance Benefits
+
 - **Traceable**: Every key extraction is logged
 - **Non-Reusable**: Enforces one-time key policy automatically
 - **Verifiable**: Can prove which keys were used when
@@ -80,6 +89,7 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 ## Requirements
 
 ### Software Requirements
+
 - Linux OS (Ubuntu, Debian, RHEL, etc.)
 - Bash shell (version 4.0+)
 - Standard utilities: `dd`, `openssl`, `blockdev`
@@ -87,9 +97,21 @@ This system transforms a USB pendrive into a secure hardware token containing gi
 - For verification: `od`, `sha256sum`, `xxd`
 
 ### Hardware Requirements
+
 - USB pendrive (recommended 32GB or larger)
 - Root/sudo access for raw device operations
 - Sufficient RAM for buffer operations (minimal)
+
+## WARNING
+
+- **This system operates directly on block devices and is not designed for use with mounted filesystems or partitions.**
+- **It will overwrite data on the specified device without warning.**
+- **Ensure you have backups of any important data before proceeding.**
+- **Using this system on a mounted filesystem or partition can lead to data corruption and loss.**
+- **Always unmount the pendrive before running any commands.**
+- **This system is not a replacement for proper data backup solutions. It is intended for secure key management, not general data storage.**
+- **Ensure you have a backup of any important data on the pendrive before running the preparation script.**
+- **The preparation script will format the pendrive and erase all existing data.**
 
 ## Quick Start
 
@@ -125,11 +147,13 @@ sudo fdisk -l
 ### Step 2: Run rand2stick.sh
 
 #### Basic Usage (Recommended)
+
 ```bash
 sudo ./rand2stick.sh -d /dev/sdc
 ```
 
 #### Advanced Options
+
 ```bash
 # Save the master encryption key (optional)
 sudo ./rand2stick.sh -d /dev/sdc -k master_key.txt
@@ -160,7 +184,8 @@ sudo ./rand2stick.sh -d /dev/sdc -f
 6. **Verifies**: Optionally dumps samples and checksums
 
 ### Expected Output
-```
+
+```Preparing pendrive for secure key storage...
 • Target device        : /dev/sdc
 • Device size         : 31004295168 bytes
 • Fill size           : 29930553344 bytes
@@ -176,6 +201,7 @@ Done.
 ```
 
 ### Time Estimates
+
 - 8GB pendrive: ~5-10 minutes
 - 32GB pendrive: ~20-40 minutes  
 - 128GB pendrive: ~1-2 hours
@@ -223,6 +249,10 @@ chmod +x dump_memory.sh
 tail -20 dump_memory.sh
 
 # Optional: Clean up any trailing garbage
+# Here, 223 is the last line number of the script
+# Adjust if your script is longer or shorter, we have to 
+# ensure we only keep the script part and discard any trailing 
+# random data (might happen due to dd command)
 head -n 223 dump_memory.sh > dump_clean.sh
 mv dump_clean.sh dump_memory.sh
 chmod +x dump_memory.sh
@@ -302,41 +332,54 @@ tail -1 ~/.pendrive_key_record.log
 ### Example Session
 
 ```bash
-# Day 1: Encrypt important database
+# 1: Encrypt important database
 sudo ./dump_memory.sh /dev/sdc db_key.bin
 openssl enc -aes-256-cbc -in database.sql -out database.sql.enc -pass file:db_key.bin
 
-# Day 2: Encrypt backup
+# 2: Encrypt backup
 sudo ./dump_memory.sh /dev/sdc backup_key.bin
 tar czf - /important/data | openssl enc -aes-256-cbc -out backup.tar.gz.enc -pass file:backup_key.bin
 
-# Day 3: Check what's been used
+# 3: Check what's been used
 cat ~/.pendrive_key_record.log
 # /dev/sdc|0|32|db_key.bin|2025-01-28 10:15:23
 # /dev/sdc|32|32|backup_key.bin|2025-01-29 11:30:45
+
+# 4: Create a new key for secure communication
+sudo ./dump_memory.sh /dev/sdc comm_key.bin
+openssl enc -aes-256-cbc -in message.txt -out message.txt.enc -pass file:comm_key.bin
+
+# 5: Generate a password hash for secure storage
+sudo ./dump_memory.sh /dev/sdc password_hash.bin
+xxd -p password_has.bin | tr -d '\n' > password.txt
+xxd -p password_hash.bin | sha256sum > password_hash.txt
 ```
 
 ## Security Considerations
 
 ### Physical Security
+
 - **Store pendrives in a safe or secure location**
 - **Consider using multiple pendrives for different security levels**
 - **Never leave pendrives unattended in untrusted environments**
 - **Use tamper-evident seals if necessary**
 
 ### Operational Security
+
 - **Never reuse keys** - The system prevents this automatically
 - **Delete key files after use** if they're no longer needed
 - **Don't store keys on network-accessible systems**
 - **Use different pendrives for different projects/clients**
 
 ### Key Hygiene
+
 - **Wipe key files securely** after use: `shred -vfz keyfile.bin`
 - **Don't copy keys to multiple locations**
 - **Never transmit keys over insecure channels**
 - **Maintain the audit log** (`~/.pendrive_key_record.log`)
 
 ### Backup Considerations
+
 - **The pendrive IS your key backup** - Keep it safe
 - **Consider creating duplicate pendrives** for critical applications
 - **Store pendrives in different physical locations**
@@ -347,6 +390,7 @@ cat ~/.pendrive_key_record.log
 ### Common Issues and Solutions
 
 #### "Device not found" or "Not a block device"
+
 ```bash
 # Verify device is connected
 lsblk
@@ -355,6 +399,7 @@ lsblk
 ```
 
 #### "Range overlap detected"
+
 ```bash
 # You're trying to reuse a key offset
 # Solution 1: Let the script auto-select
@@ -365,6 +410,7 @@ cat ~/.pendrive_key_record.log
 ```
 
 #### Retrieved script has garbage at the end
+
 ```bash
 # This is normal - random data after the script
 # Clean it up if desired:
@@ -374,6 +420,7 @@ chmod +x dump_memory.sh
 ```
 
 #### "Permission denied"
+
 ```bash
 # Always use sudo for device operations
 sudo ./dump_memory.sh /dev/sdc key.bin
@@ -383,6 +430,7 @@ chmod +x rand2stick.sh dump_memory.sh
 ```
 
 #### Slow write speeds
+
 ```bash
 # Use larger block size
 sudo ./rand2stick.sh -d /dev/sdc -b 4M
@@ -394,6 +442,7 @@ sudo apt-get install pv
 ## Technical Details
 
 ### Encryption Method
+
 - **Algorithm**: AES-256-CTR (Counter mode)
 - **Key Source**: `/dev/urandom` 
 - **Key Size**: 256 bits (32 bytes)
@@ -401,6 +450,7 @@ sudo apt-get install pv
 - **Implementation**: OpenSSL
 
 ### Storage Layout
+
 ```
 [Device Start]
 |---------------------|-----------------|
@@ -411,6 +461,7 @@ sudo apt-get install pv
 ```
 
 ### Record File Format
+
 ```
 # ~/.pendrive_key_record.log
 DEVICE|START|LENGTH|OUTPUT|TIMESTAMP
@@ -419,6 +470,7 @@ DEVICE|START|LENGTH|OUTPUT|TIMESTAMP
 ```
 
 ### Capacity Calculations
+
 - **32GB pendrive**: ~30GB usable = ~1 billion 32-byte keys
 - **128GB pendrive**: ~126GB usable = ~4 billion 32-byte keys
 - **1TB pendrive**: ~1022GB usable = ~32 billion 32-byte keys
@@ -426,33 +478,43 @@ DEVICE|START|LENGTH|OUTPUT|TIMESTAMP
 ## FAQ
 
 ### Q: Can I use this on Windows?
+
 A: The scripts are bash-based and require Linux. Use WSL2 on Windows or a Linux VM.
 
 ### Q: What happens if I lose the pendrive?
+
 A: Any unused keys are lost. Used keys remain in whatever systems you've deployed them to. This is why backup pendrives are recommended for critical applications.
 
 ### Q: Can I extract keys larger than 32 bytes?
+
 A: Yes, specify the length: `sudo ./dump_memory.sh /dev/sdc key.bin 0 64` for a 64-byte key.
 
 ### Q: Is the master key needed after preparation?
+
 A: No, the master key is only used during pendrive preparation. You can safely discard it.
 
 ### Q: Can I use the same pendrive on multiple computers?
+
 A: Yes, but each computer will maintain its own extraction record. Consider centralizing the record file if sharing.
 
 ### Q: How random is the data?
+
 A: It uses `/dev/urandom` which is cryptographically secure on modern Linux systems, further mixed with AES-256-CTR.
 
 ### Q: Can I verify a key hasn't been tampered with?
+
 A: Yes, extract it again and compare SHA-256 hashes. The data on the pendrive is read-only after preparation.
 
 ### Q: What's the performance impact of the overlap checking?
+
 A: Minimal. The script reads a text file that grows by one line per extraction.
 
 ### Q: Can I reset and start over?
+
 A: Run `rand2stick.sh` again to completely rebuild the pendrive with new random data. Back up and delete `~/.pendrive_key_record.log` to reset the extraction record.
 
 ### Q: Is this FIPS compliant?
+
 A: The randomness source (`/dev/urandom`) and AES-256 are FIPS-approved algorithms, but the overall system hasn't been formally FIPS validated.
 
 ## Support and Contributions
