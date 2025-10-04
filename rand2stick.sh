@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #
-#    Copyright [2025] [Panchajanya1999]
+#    Copyright 2025 Panchajanya1999
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@
 # Still use pipefail but don't exit on errors
 set -o pipefail
 
-# ---------- defaults ----------
+# ---------- defaults,  do not change it ----------
 DEVICE=${DEVICE:-/dev/sdc}
 BS=${BS:-1M}
 VERIFY=${VERIFY:-yes}
@@ -96,7 +96,7 @@ shift $((OPTIND-1))
 # Parse RESERVED_SPACE to bytes early
 RESERVED_SPACE_BYTES=$(parse_size "$RESERVED_SPACE")
 
-# ---------- sanity checks ----------
+# ---------- sanity checks ---------- #
 [[ -b $DEVICE ]] || { echo "ERROR: $DEVICE is not a block device." >&2; exit 1; }
 command -v openssl >/dev/null || { echo "Need openssl." >&2; exit 1; }
 command -v dd >/dev/null     || { echo "Need dd." >&2; exit 1; }
@@ -112,9 +112,9 @@ fi
 # Check for pv for better progress
 HAS_PV=no
 command -v pv >/dev/null && HAS_PV=yes
-# -----------------------------------
+# ----------------------------------- #
 
-# ---------- calculate device size and reserved space ----------
+# ---------- calculate device size and reserved space ---------- #
 if [[ $(uname) == "Linux" ]]; then
   DEVICE_SIZE=$(blockdev --getsize64 "$DEVICE")
 else
@@ -128,7 +128,7 @@ FILL_SIZE=$((DEVICE_SIZE - RESERVED_SPACE_BYTES))
 RESERVED_START=$FILL_SIZE
 RESERVED_END=$DEVICE_SIZE
 
-# ---------- convert BS to bytes for accurate count calculation ----------
+# ---------- convert BS to bytes for accurate count calculation ---------- #
 BS_BYTES=$(parse_size "$BS") # Reuse parse_size for BS too
 
 BLOCK_COUNT=$((FILL_SIZE / BS_BYTES))
@@ -152,12 +152,12 @@ echo "• Progress tool       : ${HAS_PV:+pv (enhanced) }dd (basic)"
 echo
 [[ $PROMPT == no ]] || { read -rp "Type YES to irrevocably wipe $DEVICE (except reserved space): " answer; [[ $answer == YES ]] || { echo "Aborted."; exit 0; }; }
 
-# ---------- check entropy pool ----------
+# ---------- check entropy pool ---------- #
 if [[ $(uname) == "Linux" && -f /proc/sys/kernel/random/entropy_avail && $(cat /proc/sys/kernel/random/entropy_avail) -lt 1000 ]]; then
   echo "WARNING: Low entropy pool; consider waiting or using /dev/random for better randomness."
 fi
 
-# ---------- generate one-time 256-bit key and 16-byte IV ----------
+# ---------- generate one-time 256-bit key and 16-byte IV ---------- #
 if [[ $PASSPHRASE == yes ]]; then
   read -rsp "Enter passphrase for key derivation: " passphrase
   echo
@@ -203,7 +203,7 @@ echo "Writing encrypted random data… this takes a while."
 
 sync
 
-# ---------- write memory dump script to reserved space ----------
+# ---------- write memory dump script to reserved space ---------- #
 DUMP_SCRIPT=$(mktemp)
 cat >"$DUMP_SCRIPT" <<'EOF'
 #!/bin/bash
@@ -448,15 +448,17 @@ sync
 
 # Save retrieval command to a local file for future reference
 RETRIEVAL_FILE="retrieve_script_commands.txt"
-echo "# Commands to retrieve the dump_memory.sh script from device $DEVICE" > "$RETRIEVAL_FILE"
-echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((SCRIPT_RETRIEVAL_OFFSET / 4096)) count=$SCRIPT_BLOCKS" >> "$RETRIEVAL_FILE"
-echo "chmod +x dump_memory.sh  # Make the retrieved script executable" >> "$RETRIEVAL_FILE"
-echo "" >> "$RETRIEVAL_FILE"
-echo "# Memory range information:" >> "$RETRIEVAL_FILE"
-echo "# Reserved space starts at byte: $RESERVED_START" >> "$RETRIEVAL_FILE"
-echo "# Reserved space ends at byte: $RESERVED_END" >> "$RETRIEVAL_FILE"
-echo "# Exact command to retrieve script:" >> "$RETRIEVAL_FILE"
-echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((RESERVED_START / 4096)) count=$SCRIPT_BLOCKS" >> "$RETRIEVAL_FILE"
+{
+  echo "# Commands to retrieve the dump_memory.sh script from device $DEVICE"
+  echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((SCRIPT_RETRIEVAL_OFFSET / 4096)) count=$SCRIPT_BLOCKS"
+  echo "chmod +x dump_memory.sh  # Make the retrieved script executable"
+  echo ""
+  echo "# Memory range information:"
+  echo "# Reserved space starts at byte: $RESERVED_START"
+  echo "# Reserved space ends at byte: $RESERVED_END"
+  echo "# Exact command to retrieve script:"
+  echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((RESERVED_START / 4096)) count=$SCRIPT_BLOCKS"
+} > "$RETRIEVAL_FILE"
 
 echo "Retrieval commands saved to $RETRIEVAL_FILE"
 
