@@ -448,15 +448,17 @@ sync
 
 # Save retrieval command to a local file for future reference
 RETRIEVAL_FILE="retrieve_script_commands.txt"
-echo "# Commands to retrieve the dump_memory.sh script from device $DEVICE" > "$RETRIEVAL_FILE"
-echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((SCRIPT_RETRIEVAL_OFFSET / 4096)) count=$SCRIPT_BLOCKS" >> "$RETRIEVAL_FILE"
-echo "chmod +x dump_memory.sh  # Make the retrieved script executable" >> "$RETRIEVAL_FILE"
-echo "" >> "$RETRIEVAL_FILE"
-echo "# Memory range information:" >> "$RETRIEVAL_FILE"
-echo "# Reserved space starts at byte: $RESERVED_START" >> "$RETRIEVAL_FILE"
-echo "# Reserved space ends at byte: $RESERVED_END" >> "$RETRIEVAL_FILE"
-echo "# Exact command to retrieve script:" >> "$RETRIEVAL_FILE"
-echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((RESERVED_START / 4096)) count=$SCRIPT_BLOCKS" >> "$RETRIEVAL_FILE"
+{
+  echo "# Commands to retrieve the dump_memory.sh script from device $DEVICE"
+  echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((SCRIPT_RETRIEVAL_OFFSET / 4096)) count=$SCRIPT_BLOCKS"
+  echo "chmod +x dump_memory.sh  # Make the retrieved script executable"
+  echo ""
+  echo "# Memory range information:"
+  echo "# Reserved space starts at byte: $RESERVED_START"
+  echo "# Reserved space ends at byte: $RESERVED_END"
+  echo "# Exact command to retrieve script:"
+  echo "sudo dd if=$DEVICE of=dump_memory.sh bs=4096 skip=$((RESERVED_START / 4096)) count=$SCRIPT_BLOCKS"
+} > "$RETRIEVAL_FILE"
 
 echo "Retrieval commands saved to $RETRIEVAL_FILE"
 
