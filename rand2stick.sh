@@ -176,17 +176,36 @@ fi
 if [[ $PASSPHRASE == yes ]]; then
   read -rsp "Enter passphrase for key derivation: " passphrase
   echo
-  KEY_HEX=$(echo -n "$passphrase" | openssl dgst -sha256 | cut -d' ' -f2)
-  IV_HEX=$(echo -n "$passphrase$passphrase" | openssl dgst -sha256 | cut -d' ' -f2 | cut -c1-32) # Simple derivation; use PBKDF2 in real impl if needed
+  # Generate random salt for PBKDF2
+  SALT_HEX=$(openssl rand -hex 16)
+  # Use PBKDF2 with 100,000 iterations for secure key derivation
+  # Try openssl enc -pbkdf2 method (widely available since OpenSSL 1.1.1)
+  DERIVED=$(openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -S "$SALT_HEX" -k "$passphrase" -P 2>/dev/null)
+  if [[ -n "$DERIVED" ]]; then
+    KEY_HEX=$(echo "$DERIVED" | grep "^key=" | cut -d= -f2)
+    IV_HEX=$(echo "$DERIVED" | grep "^iv=" | cut -d= -f2)
+  else
+    # Fallback: use SHA-256 with salt if PBKDF2 not available (old OpenSSL)
+    echo "WARNING: PBKDF2 not available, using salted SHA-256 (less secure)." >&2
+    KEY_HEX=$(echo -n "${SALT_HEX}${passphrase}" | openssl dgst -sha256 | cut -d' ' -f2)
+    IV_HEX=$(echo -n "${passphrase}${SALT_HEX}" | openssl dgst -sha256 | cut -d' ' -f2 | cut -c1-32)
+  fi
+  # Clear passphrase from memory as soon as possible
+  unset passphrase
 else
   KEY_HEX=$(openssl rand -hex 32)
   IV_HEX=$(openssl rand -hex 16)
+  SALT_HEX=""
 fi
 if [[ -n $KEY_FILE ]]; then
   # Save and restore umask to avoid affecting other operations
   ORIG_UMASK=$(umask)
   umask 177
-  printf "Key: %s\nIV: %s\n" "$KEY_HEX" "$IV_HEX" >"$KEY_FILE"
+  if [[ -n "$SALT_HEX" ]]; then
+    printf "Salt: %s\nKey: %s\nIV: %s\n" "$SALT_HEX" "$KEY_HEX" "$IV_HEX" >"$KEY_FILE"
+  else
+    printf "Key: %s\nIV: %s\n" "$KEY_HEX" "$IV_HEX" >"$KEY_FILE"
+  fi
   umask "$ORIG_UMASK"
   ORIG_UMASK=""
 fi
@@ -205,9 +224,24 @@ echo "Writing encrypted random data… this takes a while."
   fi
   ENCRYPTION_STATUS=$?
   
-  # Handle remainder
+  # Handle remainder with proper CTR counter continuation
   if [[ $REMAINDER -gt 0 ]]; then
-    openssl enc -aes-256-ctr -K "$KEY_HEX" -iv "$IV_HEX" -nosalt -in /dev/urandom \
+    # Calculate CTR counter offset: number of 16-byte blocks already processed
+    BLOCKS_16=$(( (BLOCK_COUNT * BS_BYTES) / 16 ))
+    # Increment IV by the number of blocks processed to maintain CTR continuity
+    # Use bc for arbitrary precision arithmetic on large hex numbers
+    if command -v bc >/dev/null 2>&1; then
+      IV_DECIMAL=$(echo "ibase=16; ${IV_HEX^^}" | bc)
+      NEW_IV_DECIMAL=$(echo "$IV_DECIMAL + $BLOCKS_16" | bc)
+      NEW_IV_HEX=$(echo "obase=16; $NEW_IV_DECIMAL" | bc | tr '[:upper:]' '[:lower:]')
+      # Pad to 32 hex chars (16 bytes)
+      while [[ ${#NEW_IV_HEX} -lt 32 ]]; do NEW_IV_HEX="0$NEW_IV_HEX"; done
+    else
+      # Fallback: just use original IV (less ideal but still functional for random data)
+      NEW_IV_HEX=$IV_HEX
+      echo "WARNING: bc not available, using original IV for remainder (CTR counter not incremented)."
+    fi
+    openssl enc -aes-256-ctr -K "$KEY_HEX" -iv "$NEW_IV_HEX" -nosalt -in /dev/urandom \
     | dd of="$DEVICE" bs=1 count="$REMAINDER" seek="$((BLOCK_COUNT * BS_BYTES))" status=progress
     REMAINDER_STATUS=$?
     [[ $REMAINDER_STATUS -ne 0 ]] && echo "WARNING: Remainder dd exited with status $REMAINDER_STATUS."
