@@ -164,7 +164,7 @@ sudo ./rand2stick.sh -d /dev/sdc -r 512M
 # Skip confirmation prompt
 sudo ./rand2stick.sh -d /dev/sdc -y
 
-# Use passphrase-derived key instead of random
+# Use passphrase-derived key instead of random (PBKDF2, 100k iterations)
 sudo ./rand2stick.sh -d /dev/sdc -p
 
 # Custom block size for faster writing
@@ -444,10 +444,11 @@ sudo apt-get install pv
 ### Encryption Method
 
 - **Algorithm**: AES-256-CTR (Counter mode)
-- **Key Source**: `/dev/urandom` 
+- **Key Source**: `/dev/urandom` (or PBKDF2-derived when using `-p`)
 - **Key Size**: 256 bits (32 bytes)
 - **IV Size**: 128 bits (16 bytes)
 - **Implementation**: OpenSSL
+- **Passphrase Mode**: PBKDF2 with 100,000 iterations and random salt
 
 ### Storage Layout
 
@@ -458,6 +459,19 @@ sudo apt-get install pv
 | Data               | (dump_memory.sh) |
 |---------------------|-----------------|
 0                    N-1GB              N
+```
+
+### Key File Format (when using `-k`)
+
+```
+# Random mode:
+Key: <64 hex chars>
+IV: <32 hex chars>
+
+# Passphrase mode (-p):
+Salt: <32 hex chars>
+Key: <64 hex chars>
+IV: <32 hex chars>
 ```
 
 ### Record File Format
