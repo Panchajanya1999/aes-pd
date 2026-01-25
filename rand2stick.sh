@@ -50,6 +50,21 @@
 # Still use pipefail but don't exit on errors
 set -o pipefail
 
+# ---------- cleanup trap ---------- #
+ORIG_UMASK=""
+cleanup() {
+  local exit_code=$?
+  # Restore umask if changed
+  [[ -n "${ORIG_UMASK:-}" ]] && umask "$ORIG_UMASK"
+  # Remove temporary files
+  [[ -n "${DUMP_SCRIPT:-}" && -f "$DUMP_SCRIPT" ]] && rm -f "$DUMP_SCRIPT"
+  # Securely unset sensitive variables
+  unset KEY_HEX IV_HEX passphrase 2>/dev/null
+  exit "$exit_code"
+}
+trap cleanup EXIT INT TERM
+# ---------------------------------- #
+
 # ---------- defaults,  do not change it ----------
 DEVICE=${DEVICE:-/dev/sdc}
 BS=${BS:-1M}
@@ -167,7 +182,14 @@ else
   KEY_HEX=$(openssl rand -hex 32)
   IV_HEX=$(openssl rand -hex 16)
 fi
-[[ -n $KEY_FILE ]] && { umask 177; printf "Key: %s\nIV: %s\n" "$KEY_HEX" "$IV_HEX" >"$KEY_FILE"; }
+if [[ -n $KEY_FILE ]]; then
+  # Save and restore umask to avoid affecting other operations
+  ORIG_UMASK=$(umask)
+  umask 177
+  printf "Key: %s\nIV: %s\n" "$KEY_HEX" "$IV_HEX" >"$KEY_FILE"
+  umask "$ORIG_UMASK"
+  ORIG_UMASK=""
+fi
 
 echo "Writing encrypted random data… this takes a while."
 
@@ -433,14 +455,16 @@ EOF
 
 # Save the exact start location of the dump_memory.sh script for easy retrieval
 SCRIPT_RETRIEVAL_OFFSET=$RESERVED_START
-SCRIPT_BLOCKS=3  # Assuming script fits in one 4KB block
+# Calculate script blocks dynamically based on actual size
+SCRIPT_SIZE=$(wc -c < "$DUMP_SCRIPT")
+SCRIPT_BLOCKS=$(( (SCRIPT_SIZE / 4096) + 1 ))  # Round up to next 4K block
 
 echo "Writing memory dump script to reserved space..."
 # Try to write the script and handle errors gracefully
-if ! dd if="$DUMP_SCRIPT" of="$DEVICE" bs=4096 seek=$((RESERVED_START / 4096)) conv=fsync; then
-  echo "WARNING: Failed to write memory dump script to reserved space. Trying again with lower-level approach..."
-  # Try a more direct approach as fallback
-  cat "$DUMP_SCRIPT" | dd of="$DEVICE" bs=4096 seek=$((RESERVED_START / 4096)) conv=fsync || echo "ERROR: All attempts to write script failed."
+if ! dd if="$DUMP_SCRIPT" of="$DEVICE" bs=4096 seek=$((RESERVED_START / 4096)) conv=fsync 2>/dev/null; then
+  echo "WARNING: Failed to write memory dump script to reserved space. Trying again with direct approach..."
+  # Try direct dd without conv=fsync as fallback
+  dd if="$DUMP_SCRIPT" of="$DEVICE" bs=4096 seek=$((RESERVED_START / 4096)) 2>/dev/null || echo "ERROR: All attempts to write script failed."
 fi
 rm -f "$DUMP_SCRIPT"
 
@@ -490,7 +514,6 @@ if [[ $VERIFY == yes ]]; then
   echo "chmod +x dump_memory.sh"
 fi
 
-# Securely unset sensitive variables
-unset KEY_HEX IV_HEX passphrase 2>/dev/null
+# Sensitive variables are cleaned up by the trap handler
 
 echo "Done."
