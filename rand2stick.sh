@@ -24,7 +24,7 @@
 #
 #   DEFAULTS:
 #     DEVICE  = /dev/sdc        (target block device)
-#     BS      = 4M              (dd block size)
+#     BS      = 1M              (dd block size)
 #     VERIFY  = yes             (hex-dump afterwards)
 #     FREEZE  = no              (run hdparm --security-freeze)
 #     RESERVED_SPACE = 1G       (reserved space at the end)
@@ -74,7 +74,7 @@ parse_size() {
 
 usage() {
   grep -E '^#( |$)' "$0" | sed 's/^# //'
-  exit 1
+  exit "${1:-1}"
 }
 
 while getopts ":d:b:k:r:fnyph" opt; do
@@ -87,11 +87,11 @@ while getopts ":d:b:k:r:fnyph" opt; do
     n) VERIFY=no ;;
     y) PROMPT=no ;;
     p) PASSPHRASE=yes ;;
-    h) usage ;;
-    \?) echo "Unknown option: -$OPTARG" >&2; usage ;;
+    h) usage 0 ;;
+    \?) echo "Unknown option: -$OPTARG" >&2; usage 1 ;;
   esac
 done
-shift $((OPTIND-1))
+shift "$((OPTIND-1))"
 
 # Parse RESERVED_SPACE to bytes early
 RESERVED_SPACE_BYTES=$(parse_size "$RESERVED_SPACE")
